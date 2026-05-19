@@ -1,0 +1,15 @@
+{
+  "$schema": "https://unpkg.com/@kinbot-developer/sdk/schemas/plugin-manifest.schema.json",
+  "name": "kinbot-plugin-mistral",
+  "version": "0.1.0",
+  "description": "Mistral AI provider for KinBot — chat models via api.mistral.ai with native tool calling, vision (Pixtral), and streaming.",
+  "author": "MarlBurroW",
+  "license": "MIT",
+  "kinbot": ">=0.41.0",
+  "main": "index.ts",
+  "icon": "🌬️",
+  "tags": ["provider", "llm", "mistral"],
+  "permissions": [
+    "http:api.mistral.ai"
+  ]
+}

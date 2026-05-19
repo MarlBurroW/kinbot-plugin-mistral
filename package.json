@@ -1,0 +1,33 @@
+{
+  "name": "kinbot-plugin-mistral",
+  "version": "0.1.0",
+  "description": "Mistral AI provider for KinBot — chat models via api.mistral.ai",
+  "author": "MarlBurroW",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MarlBurroW/kinbot-plugin-mistral.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MarlBurroW/kinbot-plugin-mistral/issues"
+  },
+  "homepage": "https://github.com/MarlBurroW/kinbot-plugin-mistral#readme",
+  "main": "index.ts",
+  "files": [
+    "index.ts",
+    "plugin.json",
+    "README.md"
+  ],
+  "keywords": [
+    "kinbot-plugin",
+    "kinbot"
+  ],
+  "peerDependencies": {
+    "@kinbot-developer/sdk": "^0.2.0"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@kinbot-developer/sdk": "^0.2.0",
+    "typescript": "^6.0.3"
+  }
+}

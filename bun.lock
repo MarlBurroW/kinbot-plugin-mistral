@@ -1,0 +1,23 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "kinbot-plugin-mistral",
+      "devDependencies": {
+        "@kinbot-developer/sdk": "^0.2.0",
+        "typescript": "^6.0.3",
+      },
+      "peerDependencies": {
+        "@kinbot-developer/sdk": "^0.2.0",
+      },
+    },
+  },
+  "packages": {
+    "@kinbot-developer/sdk": ["@kinbot-developer/sdk@0.2.0", "", { "peerDependencies": { "zod": "^4.0.0" } }, "sha512-qWXj6NeJHZFc4S3ynjo2KcJStTJdritjpyAXNDi3MPRj4CIiv/mLLCx0vLKHL9Nlzsag1S3hgeIv2BBNEv3ZCg=="],
+
+    "typescript": ["typescript@6.0.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw=="],
+
+    "zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
+  }
+}
