@@ -6,7 +6,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/MarlBurroW/kinbot-plugin-mistral.git"
+    "url": "git+https://github.com/MarlBurroW/kinbot-plugin-mistral.git"
   },
   "bugs": {
     "url": "https://github.com/MarlBurroW/kinbot-plugin-mistral/issues"
