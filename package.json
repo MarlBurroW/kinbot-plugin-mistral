@@ -1,6 +1,6 @@
 {
   "name": "kinbot-plugin-mistral",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Mistral AI provider for KinBot — chat models via api.mistral.ai with native tool calling, vision (Pixtral), and streaming.",
   "author": "MarlBurroW",
   "license": "MIT",
