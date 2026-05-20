@@ -397,6 +397,7 @@ class MistralProvider implements LLMProvider {
   readonly type = 'mistral'
   readonly displayName = 'Mistral AI'
   readonly apiKeyUrl = 'https://console.mistral.ai/api-keys'
+  readonly lobehubIcon = 'Mistral'
   readonly configSchema = CONFIG_SCHEMA
   // Mistral documents 128 as the per-request function-declaration cap.
   readonly defaultMaxTools = 128

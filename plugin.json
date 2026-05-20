@@ -8,6 +8,7 @@
   "kinbot": ">=0.41.0",
   "main": "index.ts",
   "icon": "🌬️",
+  "iconUrl": "logo.svg",
   "tags": ["provider", "llm", "mistral"],
   "permissions": [
     "http:api.mistral.ai"
