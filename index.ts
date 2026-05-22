@@ -7,12 +7,16 @@
  * official `@mistralai/mistralai` package would just add weight).
  *
  * Endpoints used:
- *   - GET  /v1/models               — model listing
- *   - POST /v1/chat/completions     — chat (streamed when stream:true)
+ *   - GET  /v1/models                  — model listing (chat + audio)
+ *   - POST /v1/chat/completions        — chat (streamed when stream:true)
+ *   - POST /v1/audio/transcriptions    — Voxtral STT
  *
- * Native function calling is supported. Tool calls flow through the
- * standard `tool_calls` array on assistant deltas; this plugin
- * parses them into KinBot's `tool-use` ChatChunks.
+ * Native function calling is supported on chat. Tool calls flow
+ * through the standard `tool_calls` array on assistant deltas; this
+ * plugin parses them into KinBot's `tool-use` ChatChunks.
+ *
+ * Voxtral exposes two transcription models (voxtral-mini-2507,
+ * voxtral-small-2507) via the OpenAI-compatible audio endpoint.
  */
 
 import type {
@@ -31,6 +35,10 @@ import type {
   FinishReason,
   Usage,
   ConfigField,
+  STTProvider,
+  TranscriptionModel,
+  TranscribeRequest,
+  TranscribeResult,
 } from '@kinbot-developer/sdk'
 
 // ─── Config schema ───────────────────────────────────────────────────────────
@@ -497,11 +505,185 @@ class MistralProvider implements LLMProvider {
   }
 }
 
+// ─── Voxtral STT provider ───────────────────────────────────────────────────
+//
+// Mistral's transcription endpoint is OpenAI-compatible (POST
+// /v1/audio/transcriptions with multipart form-data: file + model +
+// optional language + timestamp_granularities[]). Two production
+// models today, both 2507-dated:
+//   - voxtral-mini-2507  — smaller / cheaper
+//   - voxtral-small-2507 — larger / better
+//
+// Voxtral is transcription-first: it doesn't ship speaker diarization
+// (`supportsDiarization: false`) or vocabulary biasing
+// (`supportsPromptBiasing: false`). It does auto-detect language and
+// segment-level timestamps when asked.
+
+const VOXTRAL_MODELS: TranscriptionModel[] = [
+  {
+    id: 'voxtral-mini-2507',
+    name: 'Voxtral Mini',
+    // Mistral doesn't publicly document a hard per-call audio cap; the
+    // upload size limits are subscription-tier dependent. Leave
+    // maxAudioSeconds undefined so the host doesn't pre-split.
+  },
+  {
+    id: 'voxtral-small-2507',
+    name: 'Voxtral Small',
+  },
+]
+
+interface VoxtralResponseSegment {
+  id?: number
+  start?: number
+  end?: number
+  text?: string
+}
+
+interface VoxtralResponse {
+  text?: string
+  language?: string
+  duration?: number
+  segments?: VoxtralResponseSegment[]
+}
+
+function extensionForMediaType(mediaType: string): string {
+  const map: Record<string, string> = {
+    'audio/mpeg': 'mp3',
+    'audio/mp3': 'mp3',
+    'audio/wav': 'wav',
+    'audio/x-wav': 'wav',
+    'audio/webm': 'webm',
+    'audio/ogg': 'ogg',
+    'audio/flac': 'flac',
+    'audio/mp4': 'mp4',
+    'audio/m4a': 'm4a',
+    'audio/x-m4a': 'm4a',
+    'audio/aac': 'aac',
+  }
+  return map[mediaType.toLowerCase()] ?? 'bin'
+}
+
+class VoxtralSTTProvider implements STTProvider {
+  readonly type = 'mistral'
+  readonly displayName = 'Mistral (Voxtral STT)'
+  readonly apiKeyUrl = 'https://console.mistral.ai/api-keys'
+  readonly lobehubIcon = 'Mistral'
+  readonly configSchema = CONFIG_SCHEMA
+  readonly capabilities = {
+    supportsLanguageHint: true,
+    supportsAutoDetectLanguage: true,
+    // Voxtral doesn't ship speaker labels. Diarize requests still go
+    // through; the response just won't carry speaker_id and the host
+    // surfaces a warning that the hint was ignored.
+    supportsDiarization: false,
+    supportsTimestamps: true,
+    supportsPromptBiasing: false,
+    supportedAudioFormats: [
+      'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav',
+      'audio/webm', 'audio/ogg', 'audio/flac',
+      'audio/mp4', 'audio/m4a', 'audio/x-m4a', 'audio/aac',
+    ],
+    supportsStreaming: false,
+  }
+
+  async authenticate(config: ProviderConfig): Promise<AuthResult> {
+    const apiKey = config['apiKey']
+    if (!apiKey) return { valid: false, error: 'Missing Mistral API key' }
+    // /v1/models is the cheapest auth probe — same one the LLM provider
+    // already uses. A valid Mistral key sees both chat and audio models
+    // through it.
+    try {
+      const res = await fetch(`${API_BASE}/models`, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      })
+      if (!res.ok) {
+        const err = await errorFromResponse(res)
+        return { valid: false, error: err.message }
+      }
+      return { valid: true }
+    } catch (err) {
+      return { valid: false, error: err instanceof Error ? err.message : 'Network error' }
+    }
+  }
+
+  async listModels(_config: ProviderConfig): Promise<TranscriptionModel[]> {
+    // Hardcoded — /v1/models returns both chat and audio models mixed
+    // together with no clean modality flag for Voxtral. Enumerating
+    // explicitly keeps the picker focused on the two production
+    // transcription variants.
+    return VOXTRAL_MODELS
+  }
+
+  async transcribe(
+    model: TranscriptionModel,
+    request: TranscribeRequest,
+    config: ProviderConfig,
+  ): Promise<TranscribeResult> {
+    const apiKey = config['apiKey']
+    if (!apiKey) throw new Error('Missing Mistral API key')
+
+    const warnings: string[] = []
+    const ext = extensionForMediaType(request.audio.mediaType)
+    if (ext === 'bin') {
+      warnings.push(
+        `Audio MIME type "${request.audio.mediaType}" not recognized; Voxtral may reject it.`,
+      )
+    }
+
+    const form = new FormData()
+    const file = new File([request.audio.data as BlobPart], `audio.${ext}`, {
+      type: request.audio.mediaType,
+    })
+    form.append('file', file)
+    form.append('model', model.id)
+    if (request.lang) form.append('language', request.lang)
+    if (request.timestamps) {
+      // OpenAI-compatible convention — repeated bracketed key.
+      form.append('timestamp_granularities[]', 'segment')
+    }
+
+    const res = await fetch(`${API_BASE}/audio/transcriptions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: form,
+      signal: request.signal,
+    })
+    if (!res.ok) throw await errorFromResponse(res)
+    const data = (await res.json()) as VoxtralResponse
+
+    const segments =
+      request.timestamps && data.segments
+        ? data.segments
+            .filter((s): s is Required<Pick<VoxtralResponseSegment, 'start' | 'end' | 'text'>> =>
+              s.start !== undefined && s.end !== undefined && typeof s.text === 'string',
+            )
+            .map((s) => ({ start: s.start, end: s.end, text: s.text }))
+        : undefined
+
+    if (request.diarize) {
+      warnings.push('Voxtral does not support diarization; the diarize hint was ignored.')
+    }
+
+    return {
+      text: data.text ?? '',
+      ...(data.language ? { language: data.language } : {}),
+      ...(data.duration ? { durationMs: Math.round(data.duration * 1000) } : {}),
+      ...(segments && segments.length > 0 ? { segments } : {}),
+      ...(warnings.length ? { warnings } : {}),
+    }
+  }
+}
+
 // ─── Plugin entry point ─────────────────────────────────────────────────────
 
 export default function mistralPlugin(ctx: PluginContext): PluginExports {
   ctx.log.info('mistral plugin loaded')
   return {
-    providers: [new MistralProvider()],
+    // Both providers share the same `type = 'mistral'` so a single
+    // configured row covers chat + Voxtral STT, exactly like the host's
+    // built-in OpenAI provider covers LLM + Embedding + Image + TTS +
+    // STT from one API-key row.
+    providers: [new MistralProvider(), new VoxtralSTTProvider()],
   }
 }
